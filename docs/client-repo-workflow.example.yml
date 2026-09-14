@@ -16,3 +16,4 @@ jobs:
     secrets:
       dashboard_url: ${{ secrets.SECURITY_DASHBOARD_URL }}
       ingest_token: ${{ secrets.SECURITY_INGEST_TOKEN }}
+      protection_bypass: ${{ secrets.SECURITY_PROTECTION_BYPASS }} # kalau dashboard pakai domain *.vercel.app bawaan

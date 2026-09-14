@@ -40,6 +40,18 @@ repo klien C ──(reusable workflow)──────────────
    npm run db:migrate
    ```
 5. Deploy (`vercel --prod` atau lewat Git push, tergantung setup CI kamu).
+6. Kalau project Vercel kamu punya **Vercel Authentication** (deployment
+   protection) aktif untuk domain `*.vercel.app` bawaan — cek di Project
+   Settings → Deployment Protection — generate juga **Protection Bypass for
+   Automation**:
+   ```bash
+   vercel api /v1/projects/<project-id>/protection-bypass -X PATCH --input <(echo '{"generate": {}}')
+   ```
+   Simpan secret yang dihasilkan; ini yang dipakai GitHub Actions repo klien
+   supaya bisa POST ke `/api/ingest` tanpa kena SSO wall (lihat bagian
+   "Menghubungkan repo klien" di bawah). Kalau dashboard sudah punya custom
+   domain sendiri, langkah ini bisa dilewati — proteksi hanya berlaku di
+   domain `*.vercel.app` default.
 
 ## Menjalankan dashboard secara lokal
 
@@ -58,12 +70,16 @@ Buka [http://localhost:3000](http://localhost:3000).
    `.github/workflows/reusable-security-scan.yml` dan
    `docs/client-repo-workflow.example.yml` dengan nama GitHub org/user
    perusahaan kamu, lalu commit & push repo ini ke GitHub.
-2. Di tiap repo klien, tambahkan dua secrets (Settings → Secrets and
+2. Di tiap repo klien, tambahkan secrets berikut (Settings → Secrets and
    variables → Actions):
    - `SECURITY_DASHBOARD_URL` — URL publik dashboard ini, mis.
      `https://monitoring.internal.example.com`
    - `SECURITY_INGEST_TOKEN` — nilai yang sama persis dengan `INGEST_TOKEN`
      di dashboard
+   - `SECURITY_PROTECTION_BYPASS` — hanya perlu kalau dashboard masih pakai
+     domain `*.vercel.app` bawaan yang diproteksi Vercel Authentication;
+     nilainya sama dengan secret Protection Bypass for Automation di
+     langkah deploy nomor 6
 3. Salin `docs/client-repo-workflow.example.yml` ke
    `.github/workflows/security-scan.yml` di repo klien, sesuaikan nama
    `client` dan jadwal `cron`-nya.

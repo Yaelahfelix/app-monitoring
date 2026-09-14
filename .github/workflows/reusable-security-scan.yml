@@ -8,6 +8,7 @@
 #       secrets:
 #         dashboard_url: ${{ secrets.SECURITY_DASHBOARD_URL }}
 #         ingest_token: ${{ secrets.SECURITY_INGEST_TOKEN }}
+#         protection_bypass: ${{ secrets.SECURITY_PROTECTION_BYPASS }}  # opsional
 #
 # Jadwalkan lewat trigger `schedule` + `push` di workflow pemanggil.
 name: Reusable Security Scan
@@ -31,6 +32,12 @@ on:
       ingest_token:
         description: "Token yang sama dengan INGEST_TOKEN di dashboard"
         required: true
+      protection_bypass:
+        description: >-
+          Opsional. Isi kalau dashboard di-protect oleh Vercel Authentication
+          (SSO wall bawaan Vercel) di domain *.vercel.app-nya —
+          nilainya sama dengan secret automation-bypass project Vercel.
+        required: false
 
 jobs:
   scan:
@@ -61,5 +68,6 @@ jobs:
         env:
           DASHBOARD_URL: ${{ secrets.dashboard_url }}
           INGEST_TOKEN: ${{ secrets.ingest_token }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.protection_bypass }}
           CLIENT_NAME: ${{ inputs.client }}
         run: node .security-monitoring/scripts/report-scan.mjs

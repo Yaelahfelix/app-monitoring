@@ -128,12 +128,19 @@ async function main() {
     `Reporting ${payload.vulnerabilities.length} vulnerabilities and ${payload.outdatedPackages.length} outdated packages for ${client}/${repo}`
   );
 
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+  // Only needed if the dashboard project has Vercel Authentication
+  // (deployment protection) turned on for its default *.vercel.app domain.
+  if (process.env.VERCEL_PROTECTION_BYPASS) {
+    headers["x-vercel-protection-bypass"] = process.env.VERCEL_PROTECTION_BYPASS;
+  }
+
   const res = await fetch(`${dashboardUrl.replace(/\/$/, "")}/api/ingest`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 
