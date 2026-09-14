@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Security Monitoring
 
-## Getting Started
+Dashboard internal untuk memantau **dependency vulnerability** dan
+**package outdated** di seluruh project JavaScript (Next.js / Express, dll)
+milik klien-klien PDAM. Data scan dikirim langsung dari GitHub Actions di
+masing-masing repo klien.
 
-First, run the development server:
+## Arsitektur singkat
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+repo klien A ──(reusable workflow: npm audit + npm outdated)──▶ POST /api/ingest ──▶ Postgres (Neon) ──▶ dashboard
+repo klien B ──(reusable workflow)───────────────────────────▶ POST /api/ingest
+repo klien C ──(reusable workflow)───────────────────────────▶ POST /api/ingest
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Dashboard** (app ini): Next.js App Router, simpan data di Postgres lewat
+  `@neondatabase/serverless` (lihat `lib/db.ts`, `lib/queries.ts`) — cocok
+  untuk deploy ke Vercel karena tidak bergantung pada filesystem lokal.
+- **Endpoint ingest**: `POST /api/ingest`, diautentikasi dengan
+  `Authorization: Bearer <INGEST_TOKEN>`.
+- **Reusable GitHub Action**: `.github/workflows/reusable-security-scan.yml`
+  — dipanggil dari workflow di tiap repo klien, menjalankan
+  `npm audit` + `npm outdated`, lalu melaporkan hasilnya lewat
+  `scripts/report-scan.mjs`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy ke Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Push repo ini ke GitHub, import ke Vercel.
+2. Provision database Postgres lewat Vercel Marketplace:
+   ```bash
+   vercel integration add neon
+   ```
+   Ini otomatis membuat database & inject env var `DATABASE_URL` ke project
+   Vercel kamu.
+3. Set env var `INGEST_TOKEN` di Vercel (Project Settings → Environment
+   Variables) dengan string random yang panjang.
+4. Tarik env var ke lokal untuk jalankan migrasi schema:
+   ```bash
+   vercel env pull .env.local --yes
+   npm run db:migrate
+   ```
+5. Deploy (`vercel --prod` atau lewat Git push, tergantung setup CI kamu).
 
-## Learn More
+## Menjalankan dashboard secara lokal
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cp .env.example .env.local   # isi INGEST_TOKEN + DATABASE_URL
+npm install
+npm run db:migrate           # sekali saja, bikin tabel di database
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Buka [http://localhost:3000](http://localhost:3000).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Menghubungkan repo klien
 
-## Deploy on Vercel
+1. Ganti placeholder `<org>` di
+   `.github/workflows/reusable-security-scan.yml` dan
+   `docs/client-repo-workflow.example.yml` dengan nama GitHub org/user
+   perusahaan kamu, lalu commit & push repo ini ke GitHub.
+2. Di tiap repo klien, tambahkan dua secrets (Settings → Secrets and
+   variables → Actions):
+   - `SECURITY_DASHBOARD_URL` — URL publik dashboard ini, mis.
+     `https://monitoring.internal.example.com`
+   - `SECURITY_INGEST_TOKEN` — nilai yang sama persis dengan `INGEST_TOKEN`
+     di dashboard
+3. Salin `docs/client-repo-workflow.example.yml` ke
+   `.github/workflows/security-scan.yml` di repo klien, sesuaikan nama
+   `client` dan jadwal `cron`-nya.
+4. Push / tunggu jadwal cron — hasil scan otomatis muncul di dashboard ini.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Struktur data
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `repos` — satu baris per (client, repo)
+- `scans` — riwayat setiap kali workflow jalan, termasuk ringkasan jumlah
+  vulnerability per severity
+- `vulnerabilities` — detail tiap temuan `npm audit` pada satu scan
+- `outdated_packages` — detail tiap package outdated pada satu scan
+
+## Menambah scanner lain
+
+`scripts/report-scan.mjs` saat ini hanya memakai `npm audit` +
+`npm outdated`. Untuk menambah OSV-Scanner, Snyk, atau Dependabot alerts,
+tambahkan fungsi pengambil data baru di script tersebut dan gabungkan ke
+array `vulnerabilities` sebelum di-POST — skema `/api/ingest`
+(`lib/queries.ts`) sudah generik per-tool lewat field `tool`.

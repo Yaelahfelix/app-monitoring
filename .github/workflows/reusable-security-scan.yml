@@ -1,0 +1,65 @@
+# Reusable workflow — panggil ini dari repo klien (Next.js / Express) lewat:
+#
+#   jobs:
+#     security-scan:
+#       uses: Yaelahfelix/app-monitoring/.github/workflows/reusable-security-scan.yml@main
+#       with:
+#         client: "pdam-kota-a"
+#       secrets:
+#         dashboard_url: ${{ secrets.SECURITY_DASHBOARD_URL }}
+#         ingest_token: ${{ secrets.SECURITY_INGEST_TOKEN }}
+#
+# Jadwalkan lewat trigger `schedule` + `push` di workflow pemanggil.
+name: Reusable Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      client:
+        description: "Nama klien/PDAM, dipakai untuk mengelompokkan repo di dashboard"
+        required: true
+        type: string
+      node_version:
+        description: "Versi Node.js untuk instal dependency & audit"
+        required: false
+        type: string
+        default: "20"
+    secrets:
+      dashboard_url:
+        description: "Base URL dashboard app-monitoring, mis. https://monitoring.internal.example.com"
+        required: true
+      ingest_token:
+        description: "Token yang sama dengan INGEST_TOKEN di dashboard"
+        required: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Checkout app-monitoring reporting script
+        uses: actions/checkout@v4
+        with:
+          repository: Yaelahfelix/app-monitoring
+          path: .security-monitoring
+          sparse-checkout: |
+            scripts/report-scan.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Run audit & report to dashboard
+        env:
+          DASHBOARD_URL: ${{ secrets.dashboard_url }}
+          INGEST_TOKEN: ${{ secrets.ingest_token }}
+          CLIENT_NAME: ${{ inputs.client }}
+        run: node .security-monitoring/scripts/report-scan.mjs

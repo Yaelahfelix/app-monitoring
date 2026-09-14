@@ -1,68 +1,124 @@
-import Image from "next/image";
+import Link from "next/link";
+import { listReposWithLatestScan } from "@/lib/queries";
 
-export default function Home() {
+// Always read fresh data from Postgres; nothing here is prerenderable
+// at build time (DATABASE_URL is only available at runtime).
+export const dynamic = "force-dynamic";
+
+type RepoRow = {
+  id: number;
+  client: string;
+  name: string;
+  github_url: string | null;
+  scan_id: number | null;
+  scanned_at: string | null;
+  branch: string | null;
+  tool: string | null;
+  critical_count: number | null;
+  high_count: number | null;
+  moderate_count: number | null;
+  low_count: number | null;
+  outdated_count: number | null;
+};
+
+function SeverityBadge({ label, count }: { label: string; count: number }) {
+  if (!count) return null;
+  const colors: Record<string, string> = {
+    critical: "bg-red-600 text-white",
+    high: "bg-orange-500 text-white",
+    moderate: "bg-yellow-400 text-black",
+    low: "bg-zinc-300 text-black dark:bg-zinc-600 dark:text-white",
+  };
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <span
+      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${colors[label]}`}
+    >
+      {count} {label}
+    </span>
+  );
+}
+
+export default async function Home() {
+  const repos = (await listReposWithLatestScan()) as RepoRow[];
+
+  return (
+    <div className="flex flex-col flex-1 bg-zinc-50 dark:bg-black">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12">
+        <h1 className="text-2xl font-semibold text-black dark:text-zinc-50">
+          Security Monitoring
+        </h1>
+        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          Dependency vulnerability &amp; outdated-package status across client
+          repositories.
+        </p>
+
+        {repos.length === 0 ? (
+          <div className="mt-10 rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
+            Belum ada data scan masuk. Hubungkan repo klien lewat GitHub
+            Action reusable workflow (lihat{" "}
+            <code>.github/workflows/reusable-security-scan.yml</code>) supaya
+            hasilnya tampil di sini.
+          </div>
+        ) : (
+          <div className="mt-8 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-zinc-100 text-xs uppercase text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                <tr>
+                  <th className="px-4 py-3">Client</th>
+                  <th className="px-4 py-3">Repo</th>
+                  <th className="px-4 py-3">Last scan</th>
+                  <th className="px-4 py-3">Findings</th>
+                  <th className="px-4 py-3">Outdated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {repos.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="border-t border-zinc-200 dark:border-zinc-800"
+                  >
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                      {r.client}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/repos/${r.id}`}
+                        className="font-medium text-zinc-950 hover:underline dark:text-zinc-50"
+                      >
+                        {r.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      {r.scanned_at
+                        ? `${r.scanned_at} UTC (${r.branch ?? "?"})`
+                        : "belum pernah"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        <SeverityBadge label="critical" count={r.critical_count ?? 0} />
+                        <SeverityBadge label="high" count={r.high_count ?? 0} />
+                        <SeverityBadge label="moderate" count={r.moderate_count ?? 0} />
+                        <SeverityBadge label="low" count={r.low_count ?? 0} />
+                        {!r.critical_count &&
+                        !r.high_count &&
+                        !r.moderate_count &&
+                        !r.low_count &&
+                        r.scan_id ? (
+                          <span className="text-xs text-green-600 dark:text-green-400">
+                            aman
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      {r.outdated_count ?? 0}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </main>
     </div>
   );
