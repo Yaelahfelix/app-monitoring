@@ -61,7 +61,7 @@ const statements = [
 ];
 
 for (const statement of statements) {
-  await sql(statement);
+  await sql.query(statement);
   console.log("OK:", statement.trim().split("\n")[0], "...");
 }
 
